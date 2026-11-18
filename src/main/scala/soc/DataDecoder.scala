@@ -8,11 +8,11 @@ class DataDecoder(val map: SocMemoryMap = SocMemoryMap()) extends Module {
     val bootrom = new MemoryPort
     val data = new MemoryPort
     val uart = new MemoryPort
+    val gpio = new MemoryPort
+    val spi = new MemoryPort
 
     val program = map.program.map(_ => new MemoryPort)
     val qc      = map.qc.map(_ => new MemoryPort)
-    val spi     = map.spi.map(_ => new MemoryPort)
-    val gpio    = map.gpio.map(_ => new MemoryPort)
       
   })
 
@@ -22,8 +22,8 @@ class DataDecoder(val map: SocMemoryMap = SocMemoryMap()) extends Module {
     Some(map.data -> io.data),
     map.qc.zip(io.qc),
     Some(map.uart -> io.uart),
-    map.spi.zip(io.spi),
-    map.gpio.zip(io.gpio)
+    Some(map.spi -> io.spi),
+    Some(map.gpio -> io.gpio)
   ).flatten
 
   private val decoder =

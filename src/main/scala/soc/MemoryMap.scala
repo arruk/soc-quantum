@@ -26,8 +26,9 @@ case class SocMemoryMap(
   data: MemoryRegion = MemoryRegion(BigInt("10010000", 16), 1024),
   uart: MemoryRegion = MemoryRegion(BigInt("20001000", 16), 4096),
   qc: Option[MemoryRegion] = None,
-  spi: Option[MemoryRegion] = None,
-  gpio: Option[MemoryRegion] = None
+  spi: MemoryRegion = MemoryRegion(BigInt("20002000", 16), 16),
+  gpio: MemoryRegion = MemoryRegion(BigInt("20003000", 16), 16)
+
 )
 
 object MemoryMaps {
@@ -39,6 +40,8 @@ object MemoryMaps {
   val benchmark = SocMemoryMap(
     bootrom = MemoryRegion(BigInt("00000000", 16), 65536, readOnly = true),
     data = MemoryRegion(BigInt("00010000", 16), 65536),
-    uart = MemoryRegion(BigInt("00400000", 16), 4096)
+    uart = MemoryRegion(BigInt("00400000", 16), 4096),
+    gpio = MemoryRegion(BigInt("20003000", 16), 16),
+    spi = MemoryRegion(BigInt("20002000", 16), 16)
   )
 }

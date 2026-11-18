@@ -10,13 +10,19 @@ class SystemOnChip(val map: SocMemoryMap = MemoryMaps.quantum) extends Module {
   val io = IO(new Bundle {
     val tx = Output(Bool())
     val rx = Input(Bool())
-    val pins_io = Output(UInt(8.W))
+    val pinsIn = Input(UInt(8.W))
+    val pinsOut = Output(UInt(8.W))
+    val pinsOe = Output(UInt(8.W))
   })
   
   val progWords = HexWords.load(
     sys.env.getOrElse("CC_PROGROM", "../../benchmarks/build/hex/dhrystone.PROGROM.hex"),
     16384
   )
+
+  val gpio = Module(new GPIO)
+
+  val spi = Module(new SPI)
 
   val dataRam = Module(new Ram(16384))
   val bootRom = Module(new Rom(progWords))
@@ -32,6 +38,8 @@ class SystemOnChip(val map: SocMemoryMap = MemoryMaps.quantum) extends Module {
   dataDec.io.bootrom <> bootRom.io
   dataDec.io.data <> dataRam.io
   dataDec.io.uart <> uart.io.mem
+  dataDec.io.gpio <> gpio.io.mem
+  dataDec.io.spi <> spi.io.mem
 
   val instDec = Module(new InstructionDecoder(map))
   instDec.io.bootrom <> bootRom.io
@@ -40,7 +48,25 @@ class SystemOnChip(val map: SocMemoryMap = MemoryMaps.quantum) extends Module {
   instDec.io.cpu <> cpu.io.imem
   dataDec.io.cpu <> cpu.io.dmem
 
-  io.pins_io := 0.U(8.W)
+  val spiSelected = gpio.io.funcSel(0)
+
+  val spiOut = Cat(
+    spi.io.cs, 0.U(1.W), spi.io.mosi, spi.io.sclk
+  )
+
+  val outSelected = Mux(
+    spiSelected, spiOut, gpio.io.pinsOut(3,0)
+  )
+
+  val oeSelected = Mux(
+    spiSelected, "b1011".U(4.W), gpio.io.pinsOe(3,0)
+  )
+
+  io.pinsOut := Cat(gpio.io.pinsOut(7,4), outSelected)
+  io.pinsOe  := Cat(gpio.io.pinsOe(7,4), oeSelected)
+
+  gpio.io.pinsIn := io.pinsIn
+  spi.io.miso := io.pinsIn(2)
 
 }
 
