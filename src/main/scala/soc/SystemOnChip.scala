@@ -25,6 +25,9 @@ class SystemOnChip(val map: SocMemoryMap = MemoryMaps.quantum) extends Module {
   val spi = Module(new SPI)
 
   val dataRam = Module(new Ram(16384))
+  
+  val progRam = Module(new Ram(16384))
+
   val bootRom = Module(new Rom(progWords))
 
   val uart = Module(new Uart(
@@ -35,14 +38,22 @@ class SystemOnChip(val map: SocMemoryMap = MemoryMaps.quantum) extends Module {
   uart.io.rx := io.rx
 
   val dataDec = Module(new DataDecoder(map))
-  dataDec.io.bootrom <> bootRom.io
   dataDec.io.data <> dataRam.io
   dataDec.io.uart <> uart.io.mem
   dataDec.io.gpio <> gpio.io.mem
   dataDec.io.spi <> spi.io.mem
 
   val instDec = Module(new InstructionDecoder(map))
-  instDec.io.bootrom <> bootRom.io
+
+  val bootromArb = Module(new MemoryArbiter)
+  bootromArb.io.inA <> dataDec.io.bootrom
+  bootromArb.io.inB <> instDec.io.bootrom
+  bootRom.io <> bootromArb.io.out
+
+  val programArb = Module(new MemoryArbiter)
+  programArb.io.inA <> dataDec.io.program
+  programArb.io.inB <> instDec.io.program
+  progRam.io <> programArb.io.out
 
   val cpu = Module(new TorvCore)
   instDec.io.cpu <> cpu.io.imem

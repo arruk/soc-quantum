@@ -11,7 +11,6 @@ case class MemoryRegion(base: BigInt, sizeBytes: BigInt, readOnly: Boolean = fal
 /*
 case class SocMemoryMap(
   bootrom: MemoryRegion = MemoryRegion(BigInt("00400000", 16), 4096, readOnly = true),
-  program: MemoryRegion = MemoryRegion(BigInt("00800000", 16), 4096),
   data: MemoryRegion = MemoryRegion(BigInt("10010000", 16), 1024),
   qc: MemoryRegion = MemoryRegion(BigInt("20000000", 16), 4096),
   uart: MemoryRegion = MemoryRegion(BigInt("20001000", 16), 4096),
@@ -22,7 +21,7 @@ case class SocMemoryMap(
 
 case class SocMemoryMap(
   bootrom: MemoryRegion = MemoryRegion(BigInt("00400000", 16), 4096, readOnly = true),
-  program: Option[MemoryRegion] = None,
+  program: MemoryRegion = MemoryRegion(BigInt("00800000", 16), 4096),
   data: MemoryRegion = MemoryRegion(BigInt("10010000", 16), 1024),
   uart: MemoryRegion = MemoryRegion(BigInt("20001000", 16), 4096),
   qc: Option[MemoryRegion] = None,
@@ -39,6 +38,7 @@ object MemoryMaps {
   // Memory layout used by benchmarks/common/pipeline.ld and putchar.S.
   val benchmark = SocMemoryMap(
     bootrom = MemoryRegion(BigInt("00000000", 16), 65536, readOnly = true),
+    program = MemoryRegion(BigInt("00800000", 16), 4096),
     data = MemoryRegion(BigInt("00010000", 16), 65536),
     uart = MemoryRegion(BigInt("00400000", 16), 4096),
     gpio = MemoryRegion(BigInt("20003000", 16), 16),
