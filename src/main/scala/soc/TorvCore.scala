@@ -1,9 +1,10 @@
 package soc
 
 import chisel3._
-import chisel3.experimental.ExtModule
+import chisel3.experimental.{ExtModule, IntParam}
 
-class BBCore extends ExtModule {
+class BBCore(resetPC: BigInt = MemoryMaps.default.bootrom.base)
+    extends ExtModule(Map("RESET_PC" -> IntParam(resetPC))) {
   override def desiredName = "torv32"
 
   val clk    = IO(Input(Clock()))
@@ -31,13 +32,13 @@ class BBCore extends ExtModule {
   addPath("../../rtl/cores/cc/cctorv5.v")
 }
 
-class TorvCore extends Module {
+class TorvCore(resetPC: BigInt = MemoryMaps.default.bootrom.base) extends Module {
   val io = IO(new Bundle {
     val imem = new MemoryPort
     val dmem = new MemoryPort
   })
 
-  val torv = Module(new BBCore)
+  val torv = Module(new BBCore(resetPC))
   torv.clk    := clock
   torv.resetn := !reset.asBool
 

@@ -126,10 +126,10 @@ class DecoderSpec extends AnyFunSuite {
     val qc = MemoryRegion(BigInt("20000000", 16), 4096)
     val spi = MemoryRegion(BigInt("20002000", 16), 4096)
     val gpio = MemoryRegion(BigInt("20003000", 16), 4096)
-    val map = SocMemoryMap(program = Some(program), qc = Some(qc), spi = Some(spi), gpio = Some(gpio))
+    val map = SocMemoryMap(program = program, qc = Some(qc), spi = spi, gpio = gpio)
     simulate(new DataDecoder(map)) { dut =>
       val driver = new Driver(dut.clock, dut.reset, dut.io.cpu,
-        Seq(dut.io.bootrom, dut.io.program.get, dut.io.data, dut.io.qc.get, dut.io.uart, dut.io.spi.get, dut.io.gpio.get))
+        Seq(dut.io.bootrom, dut.io.program, dut.io.data, dut.io.qc.get, dut.io.uart, dut.io.spi, dut.io.gpio))
       driver.initialize()
       val regions = Seq(map.bootrom, program, map.data, qc, map.uart, spi, gpio)
       for ((region, i) <- regions.zipWithIndex) {
@@ -149,10 +149,10 @@ class DecoderSpec extends AnyFunSuite {
     val program = MemoryRegion(BigInt("00800000", 16), 20)
     val map = SocMemoryMap(
       bootrom = MemoryRegion(BigInt("00400000", 16), 12),
-      program = Some(program)
+      program = program
     )
     simulate(new InstructionDecoder(map)) { dut =>
-      val driver = new Driver(dut.clock, dut.reset, dut.io.cpu, Seq(dut.io.bootrom, dut.io.program.get))
+      val driver = new Driver(dut.clock, dut.reset, dut.io.cpu, Seq(dut.io.bootrom, dut.io.program))
       driver.initialize()
       driver.route(0, map.bootrom.base + 8, 8)
       driver.route(1, program.base + 16, 16)
@@ -164,55 +164,54 @@ class DecoderSpec extends AnyFunSuite {
     }
   }
 
-  test("Dados: mapa simples omite portas opcionais e mantém dados e UART nos destinos corretos") {
+  test("Dados: mapa padrao inclui programa, SPI e GPIO e omite somente QC") {
     val map = SocMemoryMap()
     simulate(new DataDecoder(map)) { dut =>
-      assert(Seq(dut.io.program, dut.io.qc, dut.io.spi, dut.io.gpio).forall(_.isEmpty))
+      assert(dut.io.qc.isEmpty)
       val driver = new Driver(dut.clock, dut.reset, dut.io.cpu,
-        Seq(dut.io.bootrom, dut.io.data, dut.io.uart))
+        Seq(dut.io.bootrom, dut.io.program, dut.io.data, dut.io.uart, dut.io.spi, dut.io.gpio))
       driver.initialize()
-      driver.route(0, map.bootrom.base, 0)
-      driver.route(1, map.data.end - 4, map.data.sizeBytes - 4, write = true)
-      driver.route(2, map.uart.base, 0, write = true)
-      Seq("00800000", "20000000", "20002000", "20003000").foreach { address =>
-        driver.rejected(BigInt(address, 16))
+      val regions = Seq(map.bootrom, map.program, map.data, map.uart, map.spi, map.gpio)
+      for ((region, i) <- regions.zipWithIndex) {
+        driver.route(i, region.base, 0, write = i != 0)
       }
-      driver.resetPending(1, map.data.base)
-      driver.route(2, map.uart.base + 4, 4)
+      driver.rejected(BigInt("20000000", 16))
+      driver.rejected(map.gpio.end)
+      driver.resetPending(2, map.data.base)
+      driver.route(3, map.uart.base + 4, 4)
     }
   }
 
-  test("Dados: opcionais intercalados preservam a associação entre região e porta") {
+  test("Dados: QC opcional preserva a associacao entre regioes e portas") {
     val qc = MemoryRegion(BigInt("20000000", 16), 4096)
-    val gpio = MemoryRegion(BigInt("20003000", 16), 4096)
-    val map = SocMemoryMap(qc = Some(qc), gpio = Some(gpio))
+    val map = SocMemoryMap(qc = Some(qc))
     simulate(new DataDecoder(map)) { dut =>
-      assert(dut.io.program.isEmpty && dut.io.spi.isEmpty)
       val driver = new Driver(dut.clock, dut.reset, dut.io.cpu,
-        Seq(dut.io.bootrom, dut.io.data, dut.io.qc.get, dut.io.uart, dut.io.gpio.get))
+        Seq(dut.io.bootrom, dut.io.program, dut.io.data, dut.io.qc.get, dut.io.uart, dut.io.spi, dut.io.gpio))
       driver.initialize()
       driver.route(0, map.bootrom.base, 0)
-      driver.route(1, map.data.base, 0)
-      driver.route(2, qc.base + 4, 4, write = true)
-      driver.route(3, map.uart.base + 8, 8, write = true)
-      driver.route(4, gpio.end - 4, gpio.sizeBytes - 4, write = true)
-      driver.rejected(BigInt("00800000", 16))
-      driver.rejected(BigInt("20002000", 16))
+      driver.route(1, map.program.base + 4, 4, write = true)
+      driver.route(2, map.data.base, 0)
+      driver.route(3, qc.base + 4, 4, write = true)
+      driver.route(4, map.uart.base + 8, 8, write = true)
+      driver.route(5, map.spi.base + 12, 12, write = true)
+      driver.route(6, map.gpio.end - 4, map.gpio.sizeBytes - 4, write = true)
+      driver.rejected(qc.base + 2)
     }
   }
 
-  test("Instruções: sem RAM de programa, somente BOOTROM está disponível") {
+  test("Instrucoes: mapa padrao inclui programa e reset descarta resposta pendente") {
     val map = SocMemoryMap()
     simulate(new InstructionDecoder(map)) { dut =>
-      assert(dut.io.program.isEmpty)
-      val driver = new Driver(dut.clock, dut.reset, dut.io.cpu, Seq(dut.io.bootrom))
+      val driver = new Driver(dut.clock, dut.reset, dut.io.cpu, Seq(dut.io.bootrom, dut.io.program))
       driver.initialize()
       driver.route(0, map.bootrom.base, 0)
       driver.route(0, map.bootrom.end - 4, map.bootrom.sizeBytes - 4)
+      driver.route(1, map.program.base, 0)
       driver.rejected(map.bootrom.base, write = true)
+      driver.rejected(map.program.base, write = true)
       driver.rejected(map.data.base)
-      driver.rejected(BigInt("00800000", 16))
-      driver.resetPending(0, map.bootrom.base)
+      driver.resetPending(1, map.program.base)
       driver.route(0, map.bootrom.base + 4, 4)
     }
   }

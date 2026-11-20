@@ -20,9 +20,9 @@ case class SocMemoryMap(
 */
 
 case class SocMemoryMap(
-  bootrom: MemoryRegion = MemoryRegion(BigInt("00400000", 16), 4096, readOnly = true),
-  program: MemoryRegion = MemoryRegion(BigInt("00800000", 16), 4096),
-  data: MemoryRegion = MemoryRegion(BigInt("10010000", 16), 1024),
+  bootrom: MemoryRegion = MemoryRegion(BigInt("00400000", 16), 65536, readOnly = true),
+  program: MemoryRegion = MemoryRegion(BigInt("00800000", 16), 65536),
+  data: MemoryRegion = MemoryRegion(BigInt("10010000", 16), 65536),
   uart: MemoryRegion = MemoryRegion(BigInt("20001000", 16), 4096),
   qc: Option[MemoryRegion] = None,
   spi: MemoryRegion = MemoryRegion(BigInt("20002000", 16), 16),
@@ -31,7 +31,7 @@ case class SocMemoryMap(
 )
 
 object MemoryMaps {
-  val quantum = SocMemoryMap()
+  val default = SocMemoryMap()
 
   val simpler = SocMemoryMap()
 

@@ -5,7 +5,10 @@ import chisel3._
 import chisel3.util._
 import _root_.circt.stage.ChiselStage
 
-class SystemOnChip(val map: SocMemoryMap = MemoryMaps.quantum) extends Module {
+class SystemOnChip(
+  val map: SocMemoryMap = MemoryMaps.default,
+  initializeRamFromFile: Boolean = true
+) extends Module {
 
   val io = IO(new Bundle {
     val tx = Output(Bool())
@@ -16,7 +19,7 @@ class SystemOnChip(val map: SocMemoryMap = MemoryMaps.quantum) extends Module {
   })
   
   val progWords = HexWords.load(
-    sys.env.getOrElse("CC_PROGROM", "../../benchmarks/build/hex/dhrystone.PROGROM.hex"),
+    sys.env.getOrElse("CC_BOOTROM", "../../benchmarks/build/hex/dhrystone.PROGROM.hex"),
     16384
   )
 
@@ -24,9 +27,9 @@ class SystemOnChip(val map: SocMemoryMap = MemoryMaps.quantum) extends Module {
 
   val spi = Module(new SPI)
 
-  val dataRam = Module(new Ram(16384))
+  val dataRam = Module(new Ram(16384, initializeRamFromFile))
   
-  val progRam = Module(new Ram(16384))
+  val progRam = Module(new Ram(16384, initializeRamFromFile))
 
   val bootRom = Module(new Rom(progWords))
 
@@ -55,7 +58,7 @@ class SystemOnChip(val map: SocMemoryMap = MemoryMaps.quantum) extends Module {
   programArb.io.inB <> instDec.io.program
   progRam.io <> programArb.io.out
 
-  val cpu = Module(new TorvCore)
+  val cpu = Module(new TorvCore(map.bootrom.base))
   instDec.io.cpu <> cpu.io.imem
   dataDec.io.cpu <> cpu.io.dmem
 
@@ -85,7 +88,9 @@ object SystemOnChip extends App {
   ChiselStage.emitSystemVerilogFile(
     new SystemOnChip(
       if (sys.env.get("CC_SIM_BENCHMARK").contains("1")) MemoryMaps.benchmark
-      else MemoryMaps.simpler
+      else if (sys.env.get("CC_SIM_BOOTROM").contains("1")) MemoryMaps.default
+      else MemoryMaps.simpler,
+      initializeRamFromFile = !sys.env.get("CC_INIT_RAM").contains("0")
     ),
     args = args,
     firtoolOpts = Array(
