@@ -14,55 +14,68 @@ Implementados:
   Schoeberl, incluídos como fonte em `src/main/scala/chisel/lib/uart/`.
 - Adaptador Chisel para o core Verilog e integração inicial de CPU, ROM, RAM e UART.
 
-QC, SPI, GPIO, arbitragem das memórias compartilhadas e bootloader UART/SPI ainda
-são extensões planejadas. As saídas de pinos estão fixadas em zero no top atual.
+SPI, GPIO, arbitragem das memórias e o wrapper com memória SPI também estão
+implementados. QC continua sendo uma extensão planejada.
 As suítes verificam os blocos separadamente; o funcionamento dos benchmarks
 completos depende também do core em `../../rtl/cores/cc/cctorv5.v`.
 
 ## Geração
 
-Requer Java, sbt e GNU Make. A estrutura de diretórios esperada é
-`TRYonRISCV/champion-chip/soc-quantum`, com o core e os benchmarks no repositório pai.
-Na raiz deste projeto:
+O Makefile deste repositório controla a geração do hardware: top Chisel, mapa,
+inicialização das memórias, imagens HEX, clock/baud e dependências de Scala,
+recursos Verilog, core e arquivos sbt. O ambiente esperado é
+`TRYonRISCV/generators/soc-quantum`.
 
 ```sh
-make -C ../../benchmarks dhrystone.pipeline.hex
 make
+make generate CONFIG=spi BENCHMARK=dhrystone
+make generate CONFIG=soc
+make generate CONFIG=benchmark BENCHMARK=spi_uart
 ```
 
-Saída: `build/SystemOnChip.sv`, módulos auxiliares e `filelist.f`. Fonte principal:
-`src/main/scala/soc/SystemOnChip.scala`.
+| CONFIG | Top | Imagens e mapa |
+|---|---|---|
+| `spi` | `spimemory.SystemWithSpiRom` | Bootloader em BOOTROM e aplicação na fonte SPI; PROGRAM/DATARAM sem carga por arquivo |
+| `soc` (padrão) | `soc.SystemOnChip` | Bootloader em BOOTROM e mapa padrão; periféricos externos expostos nos pinos |
+| `benchmark` | `soc.SystemOnChip` | Mapa e HEX antigos de `benchmarks/common/`, com RAM inicializada |
 
-A geração aceita estas variáveis de ambiente:
+A configuração padrão continua gerando `SystemOnChip`, com o bootloader.
+O benchmark padrão é `hello` para `spi` e `dhrystone` para `benchmark`.
+O vetor de reset do core acompanha `map.bootrom.base`, inclusive no mapa antigo
+que começa em zero. A CPU mantém `0x00400000` como valor padrão do parâmetro
+Verilog `RESET_PC`.
 
-| Variável | Função |
-|---|---|
-| `CC_PROGROM` | Caminho do HEX de instruções; padrão: Dhrystone no repositório pai |
-| `CC_DATARAM` | Caminho do HEX de dados; padrão: Dhrystone no repositório pai |
-| `CC_CLOCK_HZ` | Frequência usada pela UART; padrão: `50000000` |
-| `CC_BAUD` | Baud rate da UART; padrão: `115200` |
-| `CC_SIM_BENCHMARK=1` | Seleciona o mapa dos benchmarks antigos |
+A geração chama o Makefile de firmware apropriado antes de conferir os HEX.
+O código C, linker e startup continuam em `TRYonRISCV/benchmarks`. Não é preciso
+compilar essas imagens separadamente antes de chamar o gerador.
 
-`MemoryMaps.benchmark` usa ROM em `0x00000000` e RAM em `0x00010000`, ambas com
-64 KiB, além da UART em `0x00400000`. Os presets `quantum` e `simpler` atualmente
-compartilham a configuração base de `SocMemoryMap`.
+Os valores compartilhados de `CLOCK_HZ` e `BAUD` ficam em `config.mk`, neste
+repositório; o `cc-sim` lê o mesmo arquivo para decodificar a UART. Podem ser
+sobrescritos na linha de comando. Se alterar flags de compilação do firmware,
+limpe a aplicação antes de recompilar, conforme `benchmarks/common_soc/README.md`.
 
-O HEX da ROM é incorporado durante a geração. A RAM usa `$readmemh` no RTL gerado;
-seu construtor mantém a carga do arquivo habilitada por padrão:
+Saídas padrão: `build/<CONFIG>/<BENCHMARK>/<CLOCK_HZ>-<BAUD>/`, contendo o top
+SystemVerilog, módulos auxiliares e `filelist.f`. Em `CONFIG=spi`, `program.bytes`
+registra o tamanho da aplicação para o teste UART conferir seu comando `L`.
+O diretório pode ser escolhido com `RTL_DIR=/caminho/absoluto`.
 
-```scala
-val dataRam = Module(new Ram(16384))
+```sh
+make print-rtl-dir CONFIG=spi BENCHMARK=hello
+make firmware CONFIG=spi BENCHMARK=hello
+make clean CONFIG=spi BENCHMARK=hello
 ```
 
-Para memórias pequenas de testes, desabilite a carga do HEX completo:
+O Makefile verifica tanto os arquivos listados em `filelist.f` quanto os
+arquivos fonte. Um módulo auxiliar ausente também dispara nova geração.
+Após atualizar o firmware, uma segunda chamada sem alterações não executa sbt.
+`make clean` remove apenas o diretório de RTL da configuração selecionada.
 
-```scala
-val testRam = Module(new Ram(4, initializeFromFile = false))
-```
-
-O caminho continua sendo resolvido dentro de `Ram`; não é necessário passá-lo ao
-construtor. No simulador Verilator, `ENABLE_INITIAL_MEM_` habilita a inicialização
-emitida pelo Chisel.
+Os nomes de variáveis `CC_*` são detalhes da chamada ao gerador Chisel e ficam
+no Makefile daqui. No uso por Make, não precisam ser definidos no `cc-sim`.
+O construtor `Ram` ainda permite `initializeFromFile = false` para testes de bloco.
+No Verilator, `ENABLE_INITIAL_MEM_` habilita a carga das imagens emitida pelo
+firtool. O caminho do HEX da fonte SPI precisa continuar acessível durante a
+simulação.
 
 ## Testes
 
@@ -84,9 +97,9 @@ de benchmark. A UART verifica TX/RX, polling, retenção dos bytes e overflow.
 O ambiente de simulação está em `TRYonRISCV/cc-sim`. A partir deste projeto:
 
 ```sh
-make -C ../../cc-sim BENCHMARK=dhrystone
-make -C ../../cc-sim BENCHMARK=coremark
+make -C ../../cc-sim soc BENCHMARK=dhrystone
+make -C ../../cc-sim soc BENCHMARK=coremark
 ```
 
-Ele seleciona os HEX, gera o SoC, compila o modelo Verilator e mostra a saída UART,
+Ele delega a geração ao Makefile daqui, compila o modelo Verilator e mostra a saída UART,
 sem relatórios de desvios ou gravação de CSV.
